@@ -125,15 +125,26 @@ app.post("/login", async (req, res) => {
 });
 
 // ---------------- Invitation Routes ----------------
+// Invite Route
 app.post("/invite", isLoggedIn, async (req, res) => {
   try {
     const { name, email, roleName } = req.body;
     const adminUser = await User.findById(req.user.id);
 
-    if (!name || !email || !roleName) return res.status(400).json({ message: "All fields are required" });
+    if (!name || !email || !roleName)
+      return res.status(400).json({ message: "All fields are required" });
 
-    const role = await Role.findOne({ company_id: adminUser.company_id, role_name: roleName });
-    if (!role) return res.status(404).json({ message: "Role not found" });
+    // Find existing role
+    let role = await Role.findOne({ company_id: adminUser.company_id, role_name: roleName });
+
+    // If role doesn't exist, create it automatically
+    if (!role) {
+      role = await Role.create({
+        company_id: adminUser.company_id,
+        role_name: roleName,
+        permissions: {}, // default empty permissions
+      });
+    }
 
     const tempPassword = generatePassword(10);
 
@@ -146,6 +157,7 @@ app.post("/invite", isLoggedIn, async (req, res) => {
       sent_at: new Date(),
     });
 
+    // OAuth2 Email sending
     const oAuth2Client = new google.auth.OAuth2(
       process.env.EMAIL_CLIENT_ID,
       process.env.EMAIL_CLIENT_SECRET,
@@ -215,7 +227,7 @@ app.post("/accept-invite", async (req, res) => {
 // ---------------- Logout & Dashboard ----------------
 
 
-app.post("/logout", (req, res) => {
+app.get("/logout", (req, res) => {
   res.clearCookie("token");
   res.json({ message: "Logged out successfully" });
 });
@@ -332,6 +344,39 @@ app.get("/pending-approvals", isLoggedIn, async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
+// Get pending invitations for the logged-in user's company
+app.get("/pending-invitations", isLoggedIn, async (req, res) => {
+  try {
+    // Only allow admins to fetch invitations
+    const currentUser = await User.findById(req.user.id).populate("role_id");
+    // if (!currentUser.role_id.allAccess) {
+    //   return res.status(403).json({ message: "Not authorized" });
+    // }
+
+    // Fetch all pending invitations for the company
+    const invitations = await Invitation.find({ 
+      company_id: req.user.company_id, 
+      status: "pending" 
+    })
+      .populate("role_id", "role_name")
+      .select("email role_id generated_password sent_at");
+
+    const formatted = invitations.map(invite => ({
+      id: invite._id,
+      email: invite.email,
+      role: invite.role_id.role_name,
+      generated_password: invite.generated_password,
+      sent_at: invite.sent_at,
+    }));
+
+    res.json({ invitations: formatted });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // ---------------- Start Server ----------------
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

@@ -2,14 +2,15 @@ import React from 'react'
 import AdminNavbar from './AdminNavbar'
 import Footer from '../../components/Footer'
 
-const Customisation = () => {
+const ApprovalLogs = () => {
   return (
     <div>
       <AdminNavbar/>
-      
+      <div>ApprovalLogs</div>
       <Footer/>
     </div>
+    
   )
 }
 
-export default Customisation
+export default ApprovalLogs

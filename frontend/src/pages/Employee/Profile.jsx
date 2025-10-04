@@ -1,8 +1,12 @@
 import React from 'react'
-
+import EmployeeNavbar from "./EmployeeNavbar";
+import Footer from "../../components/Footer";
 const Profile = () => {
   return (
-    <div>Profile</div>
+    <div>
+      <EmployeeNavbar/>
+      <Footer/>
+    </div>
   )
 }
 

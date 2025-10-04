@@ -37,18 +37,29 @@ const Register = () => {
   }, []);
 
   const onSubmit = async (data) => {
-    try {
-      const res = await fetch("http://localhost:3000/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const result = await res.json();
-      console.log(result); // handle success/error as needed
-    } catch (err) {
-      console.error("Register error:", err);
+  try {
+    const res = await fetch("http://localhost:3000/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const result = await res.json();
+
+    if (res.ok) {
+      // Registration successful, redirect to login
+      alert("Registration successful! Please login.");
+      navigate("/login");
+    } else {
+      // Show backend error
+      alert(result.message || "Registration failed");
     }
-  };
+  } catch (err) {
+    console.error("Register error:", err);
+    alert("Something went wrong. Please try again.");
+  }
+};
+
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">

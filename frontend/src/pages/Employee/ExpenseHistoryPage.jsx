@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ExpenseList from "../../components/ExpenseList";
-
+import EmployeeNavbar from "./EmployeeNavbar";
+import Footer from "../../components/Footer";
 const ExpenseHistoryPage = () => {
   const [expenses, setExpenses] = useState([]);
 
@@ -17,10 +18,15 @@ const ExpenseHistoryPage = () => {
   }, []);
 
   return (
-    <div className="p-6">
+    <div>
+      <EmployeeNavbar/>
+      <div className="p-6">
       <h2 className="text-2xl font-bold mb-4">My Expense History</h2>
       <ExpenseList expenses={expenses} />
     </div>
+      <Footer/>
+    </div>
+    
   );
 };
 

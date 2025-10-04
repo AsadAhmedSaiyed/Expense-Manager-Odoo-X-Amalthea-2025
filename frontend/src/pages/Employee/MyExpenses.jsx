@@ -1,6 +1,7 @@
 // MyExpenses.jsx
 import React, { useEffect, useState } from "react";
-
+import EmployeeNavbar from "./EmployeeNavbar";
+import Footer from "../../components/Footer";
 const MyExpenses = () => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +36,9 @@ const MyExpenses = () => {
   if (error) return <p className="text-center mt-10 text-red-500">{error}</p>;
 
   return (
-    <div className="max-w-4xl mx-auto mt-10 p-6 bg-white rounded-xl shadow-md">
+    <div>
+      <EmployeeNavbar/>
+      <div className="max-w-4xl mx-auto mt-10 p-6 bg-white rounded-xl shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">My Expenses</h2>
       {expenses.length === 0 ? (
         <p className="text-center text-gray-500">No expenses submitted yet.</p>
@@ -66,6 +69,9 @@ const MyExpenses = () => {
         </table>
       )}
     </div>
+      <Footer/>
+    </div>
+    
   );
 };
 

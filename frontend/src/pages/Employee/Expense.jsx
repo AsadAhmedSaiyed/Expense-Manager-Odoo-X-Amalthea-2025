@@ -1,6 +1,8 @@
 // Expense.jsx
 import React from "react";
 import { useForm } from "react-hook-form";
+import EmployeeNavbar from "./EmployeeNavbar";
+import Footer from "../../components/Footer";
 
 const Expense = () => {
   const {
@@ -36,7 +38,9 @@ const Expense = () => {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-xl shadow-md">
+    <div>
+      <EmployeeNavbar/>
+      <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-xl shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">Add Expense</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* Amount */}
@@ -102,6 +106,10 @@ const Expense = () => {
         </button>
       </form>
     </div>
+      <Footer/>
+    </div>
+    
+    
   );
 };
 

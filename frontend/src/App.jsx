@@ -9,10 +9,12 @@ import Customisation from "./pages/admin/Customisation";
 
 import UserLogs from "./pages/admin/UserLogs";
 import Expense from "./pages/Employee/Expense";
-import ApprovalLogs from "./pages/ApprovalLogs";
+import ApprovalLogs from "./pages/admin/ApprovalLogs";
 import MyExpenses from "./pages/Employee/MyExpenses";
-import PendingApprovals from "./pages/admin/PendingApprovals";
-
+import PendingApprovals from "./pages/Employee/PendingApprovals";
+import PendingInvitation from "./pages/admin/PendingInvitation";
+import EmployeeDashboard from "./pages/Employee/EmployeeDashboard";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 
 
 const App = () => {
@@ -21,17 +23,28 @@ const App = () => {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/invite" element={<Invite />} />
         <Route path="/home" element={<Home/>} />
-        <Route path="/invite" element={<Invite/>} />
-        <Route path="/customisation" element={<Customisation/>} />
-        <Route path="/profile" element={<Profile/>} />
+        <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
 
+
+
+        {/* admin */}
+        <Route path="/invite" element={<Invite />} />
+        <Route path="/customisation" element={<Customisation/>} />
         <Route path="/userlogs" element={<UserLogs/>} />
         <Route path="/approvallogs" element={<ApprovalLogs/>} />
+        <Route path="/PendingInvitation" element={<PendingInvitation/>} />
+
+
+
+        {/* employee */}
+       
+        <Route path="/profile" element={<Profile/>} />
         <Route path="/expense" element={<Expense/>} />
         <Route path="/myexpenses" element={<MyExpenses/>} />
         <Route path="/pendingapprovals" element={<PendingApprovals/>} />
+        
         
       </Routes>
     </Router>
