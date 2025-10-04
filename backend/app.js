@@ -213,6 +213,8 @@ app.post("/accept-invite", async (req, res) => {
 });
 
 // ---------------- Logout & Dashboard ----------------
+
+
 app.post("/logout", (req, res) => {
   res.clearCookie("token");
   res.json({ message: "Logged out successfully" });
@@ -222,6 +224,40 @@ app.get("/dashboard", isLoggedIn, async (req, res) => {
   const user = await User.findById(req.user.id).populate("role_id");
   res.json({ message: "Welcome!", user: { name: user.name, email: user.email, role: user.role_id.role_name, permissions: user.role_id.permissions } });
 });
+
+// Get all users (User Logs) for the company
+app.get("/user-logs", isLoggedIn, async (req, res) => {
+  try {
+    // Only allow admins to fetch user logs
+    const currentUser = await User.findById(req.user.id).populate("role_id");
+    // if (!currentUser.role_id.allAccess) {
+    //   return res.status(403).json({ message: "Not authorized" });
+    // }
+
+    // Fetch all users of the same company
+    const users = await User.find({ company_id: req.user.company_id })
+      .populate("role_id", "role_name permissions")
+      .select("name email employee_id status createdAt updatedAt role_id");
+
+    const formattedUsers = users.map(user => ({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      employee_id: user.employee_id,
+      status: user.status,
+      role: user.role_id.role_name,
+      permissions: user.role_id.permissions,
+      created_at: user.createdAt,
+      updated_at: user.updatedAt,
+    }));
+
+    res.json({ users: formattedUsers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // ---------------- Expenses Routes ----------------
 app.post("/expenses", isLoggedIn, async (req, res) => {
@@ -252,6 +288,7 @@ app.get("/my-expenses", isLoggedIn, async (req, res) => {
     const expenses = await Expense.find({ submitted_by: req.user.id });
     res.json({ expenses });
   } catch (err) {
+    console.log(err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
