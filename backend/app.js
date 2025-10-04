@@ -192,6 +192,89 @@ app.post("/invite", isLoggedIn, async (req, res) => {
   }
 });
 
+app.post("/roles/create", isLoggedIn, async (req, res) => {
+  try {
+    const { role_name, permissions } = req.body;
+    const admin = await User.findById(req.user.id).populate("role_id");
+    if (!admin || admin.role_id.role_name !== "Admin")
+      return res.status(403).json({ message: "Only Admin can create roles" });
+
+    const existing = await Role.findOne({
+      company_id: admin.company_id,
+      role_name,
+    });
+    if (existing)
+      return res.status(400).json({ message: "Role already exists" });
+
+    const role = await Role.create({
+      company_id: admin.company_id,
+      role_name,
+      permissions: permissions || {},
+    });
+    res.status(201).json({ message: "Role created", role });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.post("/roles/assign", isLoggedIn, async (req, res) => {
+  try {
+    const { userId, roleId } = req.body;
+    const admin = await User.findById(req.user.id).populate("role_id");
+    if (!admin || admin.role_id.role_name !== "Admin")
+      return res.status(403).json({ message: "Only Admin can assign roles" });
+
+    const user = await User.findById(userId);
+    const role = await Role.findById(roleId);
+    if (
+      !user ||
+      !role ||
+      user.company_id.toString() !== admin.company_id.toString() ||
+      role.company_id.toString() !== admin.company_id.toString()
+    )
+      return res.status(404).json({ message: "User or Role not found" });
+
+    user.role_id = role._id;
+    await user.save();
+    res.json({ message: "Role assigned", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.post("/users/:id/set-manager", isLoggedIn, async (req, res) => {
+  try {
+    const { managerId } = req.body;
+    const admin = await User.findById(req.user.id).populate("role_id");
+    if (!admin || admin.role_id.role_name !== "Admin")
+      return res
+        .status(403)
+        .json({ message: "Only Admin can assign managers" });
+
+    const user = await User.findById(req.params.id);
+    const manager = await User.findById(managerId);
+    if (
+      !user ||
+      !manager ||
+      user.company_id.toString() !== admin.company_id.toString() ||
+      manager.company_id.toString() !== admin.company_id.toString()
+    )
+      return res
+        .status(400)
+        .json({ message: "Users must belong to same company" });
+
+    user.manager_id = manager._id;
+    await user.save();
+    res.json({ message: "Manager assigned", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
 app.post("/accept-invite", async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
