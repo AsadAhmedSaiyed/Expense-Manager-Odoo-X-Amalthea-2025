@@ -1,91 +1,68 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const session = require("express-session");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken")
-app.use(cookieParser());
-require("dotenv").config();
-const getCurrencyByCountry = require("./utils/getCurrency");
-const generatePassword = require("./utils/generatePassword");
+const jwt = require("jsonwebtoken");
+const { google } = require("googleapis");
+const nodemailer = require("nodemailer");
+const axios = require("axios");
+
+// Models
 const Company = require("./Models/companySchema");
-const Invitation = require("./Models/invitationSchema");
-const Role = require("./Models/roleSchema");
 const User = require("./Models/userSchema");
+const Role = require("./Models/roleSchema");
+const Invitation = require("./Models/invitationSchema");
+const Expense = require("./Models/expenseSchema");
+const ApprovalRule = require("./Models/approvalRuleSchema");
 
+// Utils
+const generatePassword = require("./utils/generatePassword");
+const getCurrencyByCountry = require("./utils/getCurrency");
 
-const port = 3000;
+const PORT = process.env.PORT || 3000;
+
 app.use(express.json());
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN,
-    credentials: true,
-  })
-);
+app.use(cookieParser());
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN, credentials: true }));
 
-//  _______________________________________Middlewares_________________________________
-
-
-// Middleware to check if user is logged in
+// ---------------- Middleware ----------------
 const isLoggedIn = (req, res, next) => {
   try {
-    // Get token from cookies
-    const token = req.cookies?.token; // cookie name is 'token'
-
-    if (!token) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET); // make sure to set JWT_SECRET in .env
-
-    // Attach user info to request object
-    req.user = decoded; 
+    const token = req.cookies?.token;
+    if (!token) return res.status(401).json({ message: "Not authenticated" });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token, please log in" });
+    return res.status(401).json({ message: "Invalid token" });
   }
 };
 
-
-//  _______________________________________Post routes_________________________________
-
-
+// ---------------- Auth Routes ----------------
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password, confirmPassword, country } = req.body;
-
-    if (!name || !email || !password || !confirmPassword || !country) {
+    if (!name || !email || !password || !confirmPassword || !country)
       return res.status(400).json({ message: "All fields are required" });
-    }
-
-    if (password !== confirmPassword) {
+    if (password !== confirmPassword)
       return res.status(400).json({ message: "Passwords do not match" });
-    }
 
     const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ message: "Email already registered" });
+    if (existingUser) return res.status(400).json({ message: "Email already registered" });
 
-    // Get currency dynamically
     const currency = await getCurrencyByCountry(country);
 
-    // Create company
     const company = await Company.create({
       company_name: name + " Company",
       country,
       currency,
     });
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create Admin role if not exists
-    let adminRole = await Role.findOne({
-      company_id: company._id,
-      role_name: "Admin",
-    });
+    let adminRole = await Role.findOne({ company_id: company._id, role_name: "Admin" });
     if (!adminRole) {
       adminRole = await Role.create({
         company_id: company._id,
@@ -94,7 +71,6 @@ app.post("/register", async (req, res) => {
       });
     }
 
-    // Create admin user
     const user = await User.create({
       company_id: company._id,
       role_id: adminRole._id,
@@ -116,92 +92,51 @@ app.post("/register", async (req, res) => {
   }
 });
 
-
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
 
-    if (!email || !password)
-      return res.status(400).json({ message: "Email and password are required" });
-
-    // Find user by email and populate role
     const user = await User.findOne({ email }).populate("role_id");
-
     if (!user) {
-      // Check if there is a pending invitation for this email
       const invite = await Invitation.findOne({ email, status: "pending" });
-      if (invite) {
-        return res.status(403).json({
-          message:
-            "You have a pending invitation. Please accept the invitation before logging in.",
-        });
-      }
+      if (invite) return res.status(403).json({ message: "Pending invitation. Accept first." });
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Check if user is active
-    if (user.status !== "active") {
-      return res.status(403).json({ message: "User not active. Contact admin." });
-    }
+    if (user.status !== "active") return res.status(403).json({ message: "User not active" });
 
-    // Verify password
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    // Generate JWT
-    const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-        company_id: user.company_id,
-        role: user.role_id.role_name,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
+    const token = jwt.sign({
+      id: user._id,
+      email: user.email,
+      company_id: user.company_id,
+      role: user.role_id.role_name,
+    }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
-    // Set token in HTTP-only cookie
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-    });
-
-    // Return user info
-    res.json({
-      message: "Login successful",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role_id.role_name,
-        permissions: user.role_id.permissions,
-      },
-    });
+    res.cookie("token", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", maxAge: 24*60*60*1000 });
+    res.json({ message: "Login successful", user: { id: user._id, name: user.name, email: user.email, role: user.role_id.role_name, permissions: user.role_id.permissions } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-app.post("/invite", async (req, res) => {
+// ---------------- Invitation Routes ----------------
+app.post("/invite", isLoggedIn, async (req, res) => {
   try {
     const { name, email, roleName } = req.body;
-    const adminId = req.user.id; // get admin info from isLoggedIn middleware
+    const adminUser = await User.findById(req.user.id);
 
-    if (!name || !email || !roleName) {
-      return res.status(400).json({ message: "Name, email, and role are required" });
-    }
+    if (!name || !email || !roleName) return res.status(400).json({ message: "All fields are required" });
 
-    // Find role by name and admin's company
-    const adminUser = await User.findById(adminId);
     const role = await Role.findOne({ company_id: adminUser.company_id, role_name: roleName });
     if (!role) return res.status(404).json({ message: "Role not found" });
 
-    // Generate temporary password
     const tempPassword = generatePassword(10);
 
-    // Save invitation
     const invitation = await Invitation.create({
       company_id: adminUser.company_id,
       email,
@@ -211,64 +146,61 @@ app.post("/invite", async (req, res) => {
       sent_at: new Date(),
     });
 
-    // Send email with nodemailer
+    const oAuth2Client = new google.auth.OAuth2(
+      process.env.EMAIL_CLIENT_ID,
+      process.env.EMAIL_CLIENT_SECRET,
+      "https://developers.google.com/oauthplayground"
+    );
+    oAuth2Client.setCredentials({ refresh_token: process.env.EMAIL_REFRESH_TOKEN });
+    const accessToken = await oAuth2Client.getAccessToken();
+
     const transporter = nodemailer.createTransport({
-      service: "gmail", // or any email service
+      service: "gmail",
       auth: {
+        type: "OAuth2",
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        clientId: process.env.EMAIL_CLIENT_ID,
+        clientSecret: process.env.EMAIL_CLIENT_SECRET,
+        refreshToken: process.env.EMAIL_REFRESH_TOKEN,
+        accessToken: accessToken.token,
       },
     });
 
-    const mailOptions = {
+    await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "You are invited!",
       text: `Hello ${name},\n\nYou have been invited to join the company. Your temporary password is: ${tempPassword}\nPlease login and change your password.\n\nThanks!`,
-    };
-
-    await transporter.sendMail(mailOptions);
-
-    res.status(200).json({
-      message: "Invitation sent successfully",
-      invitation,
     });
+
+    res.status(200).json({ message: "Invitation sent successfully via OAuth2", invitation });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// User accepts invitation and sets password
 app.post("/accept-invite", async (req, res) => {
   try {
-    const { email, password, confirmPassword } = req.body;
+    const { name, email, password, confirmPassword } = req.body;
+    if (!name || !email || !password || !confirmPassword) return res.status(400).json({ message: "All fields are required" });
+    if (password !== confirmPassword) return res.status(400).json({ message: "Passwords do not match" });
 
-    if (!email || !password || !confirmPassword)
-      return res.status(400).json({ message: "All fields are required" });
-
-    if (password !== confirmPassword)
-      return res.status(400).json({ message: "Passwords do not match" });
-
-    // Find invitation
     const invitation = await Invitation.findOne({ email, status: "pending" });
-    if (!invitation) return res.status(404).json({ message: "Invitation not found or already accepted" });
+    if (!invitation) return res.status(404).json({ message: "Invitation not found or accepted" });
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create User
     const user = await User.create({
       company_id: invitation.company_id,
       role_id: invitation.role_id,
-      name: email.split("@")[0], // can ask frontend for name
+      name,
       email,
-      employee_id: "EMP" + Math.floor(Math.random() * 10000), // generate employee id
+      employee_id: "EMP" + Math.floor(Math.random() * 10000),
       password_hash: hashedPassword,
       status: "active",
     });
 
-    // Update invitation status
     invitation.status = "accepted";
     invitation.accepted_at = new Date();
     await invitation.save();
@@ -280,7 +212,89 @@ app.post("/accept-invite", async (req, res) => {
   }
 });
 
-
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+// ---------------- Logout & Dashboard ----------------
+app.post("/logout", (req, res) => {
+  res.clearCookie("token");
+  res.json({ message: "Logged out successfully" });
 });
+
+app.get("/dashboard", isLoggedIn, async (req, res) => {
+  const user = await User.findById(req.user.id).populate("role_id");
+  res.json({ message: "Welcome!", user: { name: user.name, email: user.email, role: user.role_id.role_name, permissions: user.role_id.permissions } });
+});
+
+// ---------------- Expenses Routes ----------------
+app.post("/expenses", isLoggedIn, async (req, res) => {
+  try {
+    const { amount, currency, category, description, date } = req.body;
+    if (!amount || !currency || !category || !date) return res.status(400).json({ message: "All fields except description are required" });
+
+    const expense = await Expense.create({
+      company_id: req.user.company_id,
+      submitted_by: req.user.id,
+      amount,
+      currency,
+      category,
+      description,
+      date,
+      status: "pending",
+    });
+
+    res.status(201).json({ message: "Expense submitted", expense });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.get("/my-expenses", isLoggedIn, async (req, res) => {
+  try {
+    const expenses = await Expense.find({ submitted_by: req.user.id });
+    res.json({ expenses });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.post("/expenses/:id/approve", isLoggedIn, async (req, res) => {
+  try {
+    const { status, comments } = req.body;
+    const expense = await Expense.findById(req.params.id);
+    if (!expense) return res.status(404).json({ message: "Expense not found" });
+
+    const approver = await User.findById(req.user.id);
+    if (approver.company_id.toString() !== expense.company_id.toString())
+      return res.status(403).json({ message: "Not allowed" });
+
+    expense.approval_steps.push({
+      approver_id: req.user.id,
+      step_order: expense.approval_steps.length + 1,
+      status,
+      comments,
+    });
+
+    if (status === "approved") expense.status = "approved";
+    else if (status === "rejected") expense.status = "rejected";
+
+    await expense.save();
+    res.json({ message: `Expense ${status}`, expense });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.get("/pending-approvals", isLoggedIn, async (req, res) => {
+  try {
+    const expenses = await Expense.find({
+      company_id: req.user.company_id,
+      status: "pending",
+      "approval_steps.approver_id": { $ne: req.user.id },
+    });
+    res.json({ expenses });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------------- Start Server ----------------
+app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

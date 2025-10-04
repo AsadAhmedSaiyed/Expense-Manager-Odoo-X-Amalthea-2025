@@ -6,4 +6,4 @@ const companySchema = mongoose.Schema({
   currency: { type: String, enum: ['INR', 'USD', 'EUR', 'GBP'], required: true },
 }, { timestamps: true });
 
-module.exports =  mongoose.model('Company', companySchema);
+module.exports = mongoose.model('Company', companySchema);
